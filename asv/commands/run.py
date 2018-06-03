@@ -6,6 +6,7 @@ from __future__ import (absolute_import, division, print_function,
 
 import six
 
+from datetime import datetime
 import logging
 import traceback
 from collections import defaultdict
@@ -111,6 +112,10 @@ class Run(Command):
         parser.add_argument(
             "--no-pull", action="store_true",
             help="Do not pull the repository")
+        parser.add_argument(
+            "--force-record-commit", type=str, default="",
+            help="Commit hash specification that overrides all other "
+                 "flags and forces a recorded run.")
 
         parser.set_defaults(func=cls.run_from_args)
 
@@ -128,6 +133,7 @@ class Run(Command):
             skip_failed=args.skip_existing_failed or args.skip_existing,
             skip_existing_commits=args.skip_existing_commits,
             record_samples=args.record_samples,
+            force_record_commit=args.force_record_commit,
             pull=not args.no_pull,
             **kwargs
         )
@@ -137,7 +143,7 @@ class Run(Command):
             show_stderr=False, quick=False, profile=False, env_spec=None,
             dry_run=False, machine=None, _machine_file=None, skip_successful=False,
             skip_failed=False, skip_existing_commits=False, record_samples=False,
-            pull=True, _returns={}):
+            force_record_commit="", pull=True, _returns={}):
         machine_params = Machine.load(
             machine_name=machine,
             _path=_machine_file, interactive=True)
@@ -168,6 +174,9 @@ class Run(Command):
             commit_hashes = range_spec
         else:
             commit_hashes = repo.get_hashes_from_range(range_spec)
+
+        if force_record_commit:
+            commit_hashes = [force_record_commit]
 
         if len(commit_hashes) == 0:
             log.error("No commit hashes selected")
@@ -293,14 +302,15 @@ class Run(Command):
                         else:
                             results = benchmarks.skip_benchmarks(env)
 
-                        if dry_run or isinstance(env, environment.ExistingEnvironment):
+                        if (not (force_record_commit)
+                            and (dry_run or isinstance(env, environment.ExistingEnvironment))):
                             continue
 
                         result = Results(
                             params,
                             env.requirements,
                             commit_hash,
-                            repo.get_date(commit_hash),
+                            str(datetime.now()),
                             env.python,
                             env.name)
 

@@ -89,7 +89,7 @@ class Repo(object):
 
     def get_new_range_spec(self, latest_result, branch=None):
         """
-        Returns a formatted string giving the results between the 
+        Returns a formatted string giving the results between the
         latest result and the newest hash in a given branch.
         If no branch given, use the 'master' branch.
         """
