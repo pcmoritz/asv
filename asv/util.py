@@ -98,8 +98,8 @@ def human_float(value, significant=3, truncate_small=None, significant_zeros=Fal
     """
     Return a string representing a float with human friendly significant digits.
     Switches to scientific notation for too large/small numbers.
-    If `truncate_small`, then leading zeros of numbers < 1 are counted as 
-    significant. If not `significant_zeros`, trailing unnecessary zeros are 
+    If `truncate_small`, then leading zeros of numbers < 1 are counted as
+    significant. If not `significant_zeros`, trailing unnecessary zeros are
     stripped.
     """
     if value == 0:
@@ -360,7 +360,7 @@ def check_call(args, valid_return_codes=(0,), timeout=600, dots=True,
         cwd=cwd)
 
 
-def check_output(args, valid_return_codes=(0,), timeout=600, dots=True,
+def check_output(args, valid_return_codes=(0,), timeout=10, dots=True,
                  display_error=True, shell=False, return_stderr=False,
                  env=None, cwd=None):
     """
@@ -513,35 +513,14 @@ def check_output(args, valid_return_codes=(0,), timeout=600, dots=True,
                         os.kill(os.getpid(), signal.SIGSTOP)
                 signal.signal(signal.SIGTSTP, sig_forward)
                 signal.signal(signal.SIGCONT, sig_forward)
-
-            fds = {
-                proc.stdout.fileno(): stdout_chunks,
-                proc.stderr.fileno(): stderr_chunks
-                }
-
-            while proc.poll() is None:
                 try:
-                    rlist, wlist, xlist = select.select(
-                        list(fds.keys()), [], [], timeout)
-                except select.error as err:
-                    if err.args[0] == errno.EINTR:
-                        # interrupted by signal handler; try again
-                        continue
-                    raise
-
-                if len(rlist) == 0:
-                    # We got a timeout
+                    result = proc.communicate(timeout=10)
+                    stdout_chunks += [result[0]]
+                    stderr_chunks += [result[1]]
+                except subprocess.TimeoutExpired:
                     is_timeout = True
-                    break
-                for f in rlist:
-                    output = os.read(f, PIPE_BUF)
-                    fds[f].append(output)
-                if dots and time.time() - last_dot_time > 0.5:
-                    if dots is True:
-                        log.dot()
-                    elif dots:
-                        dots()
-                    last_dot_time = time.time()
+                    print("Timeout expired; not waiting for output.")
+
         finally:
             if posix and is_main_thread():
                 # Restore signal handlers
@@ -549,6 +528,7 @@ def check_output(args, valid_return_codes=(0,), timeout=600, dots=True,
                 signal.signal(signal.SIGCONT, signal.SIG_DFL)
 
             if proc.returncode is None:
+                print("Return Code is None")
                 # Timeout or another exceptional condition occurred, and
                 # the program is still running.
                 if posix:
@@ -564,13 +544,6 @@ def check_output(args, valid_return_codes=(0,), timeout=600, dots=True,
                         _killpg_safe(proc.pid, signal.SIGKILL)
                 else:
                     proc.terminate()
-                proc.wait()
-
-        proc.stdout.flush()
-        proc.stderr.flush()
-
-        stdout_chunks.append(proc.stdout.read())
-        stderr_chunks.append(proc.stderr.read())
 
         proc.stdout.close()
         proc.stderr.close()
