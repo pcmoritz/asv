@@ -654,5 +654,6 @@ class ExistingEnvironment(Environment):
 
     def run(self, args, **kwargs):
         log.debug("Running '{0}' in {1}".format(' '.join(args), self.name))
+        kwargs['capture_output'] = False
         return util.check_output([
             self._executable] + args, **kwargs)

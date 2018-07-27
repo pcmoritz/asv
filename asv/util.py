@@ -98,8 +98,8 @@ def human_float(value, significant=3, truncate_small=None, significant_zeros=Fal
     """
     Return a string representing a float with human friendly significant digits.
     Switches to scientific notation for too large/small numbers.
-    If `truncate_small`, then leading zeros of numbers < 1 are counted as 
-    significant. If not `significant_zeros`, trailing unnecessary zeros are 
+    If `truncate_small`, then leading zeros of numbers < 1 are counted as
+    significant. If not `significant_zeros`, trailing unnecessary zeros are
     stripped.
     """
     if value == 0:
@@ -362,7 +362,7 @@ def check_call(args, valid_return_codes=(0,), timeout=600, dots=True,
 
 def check_output(args, valid_return_codes=(0,), timeout=600, dots=True,
                  display_error=True, shell=False, return_stderr=False,
-                 env=None, cwd=None):
+                 env=None, cwd=None, capture_output=True):
     """
     Runs the given command in a subprocess, raising ProcessError if it
     fails.  Returns stdout as a string on success.
@@ -400,6 +400,10 @@ def check_output(args, valid_return_codes=(0,), timeout=600, dots=True,
     cwd : str, optional
         Specify the current working directory to use when running the
         process.
+
+    capture_output : bool, optional
+        If `True`, capture the output of the command.  Default is
+        `True`.
     """
     # Hide traceback from expected exceptions in pytest reports
     __tracebackhide__ = operator.methodcaller('errisinstance', ProcessError)
@@ -520,22 +524,24 @@ def check_output(args, valid_return_codes=(0,), timeout=600, dots=True,
                 }
 
             while proc.poll() is None:
-                try:
-                    rlist, wlist, xlist = select.select(
-                        list(fds.keys()), [], [], timeout)
-                except select.error as err:
-                    if err.args[0] == errno.EINTR:
-                        # interrupted by signal handler; try again
-                        continue
-                    raise
+                if capture_output:
+                    try:
+                        rlist, wlist, xlist = select.select(
+                            list(fds.keys()), [], [], timeout)
+                    except select.error as err:
+                        if err.args[0] == errno.EINTR:
+                            # interrupted by signal handler; try again
+                            continue
+                        raise
 
-                if len(rlist) == 0:
-                    # We got a timeout
-                    is_timeout = True
-                    break
-                for f in rlist:
-                    output = os.read(f, PIPE_BUF)
-                    fds[f].append(output)
+                    if len(rlist) == 0:
+                        # We got a timeout
+                        is_timeout = True
+                        break
+                    for f in rlist:
+                        output = os.read(f, PIPE_BUF)
+                        fds[f].append(output)
+
                 if dots and time.time() - last_dot_time > 0.5:
                     if dots is True:
                         log.dot()
@@ -569,8 +575,9 @@ def check_output(args, valid_return_codes=(0,), timeout=600, dots=True,
         proc.stdout.flush()
         proc.stderr.flush()
 
-        stdout_chunks.append(proc.stdout.read())
-        stderr_chunks.append(proc.stderr.read())
+        if capture_output:
+            stdout_chunks.append(proc.stdout.read())
+            stderr_chunks.append(proc.stderr.read())
 
         proc.stdout.close()
         proc.stderr.close()
